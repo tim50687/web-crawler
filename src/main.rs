@@ -1,4 +1,3 @@
-use clap::{Arg, Command};
 
 mod util;
 use util::parse_arguments;
@@ -12,4 +11,8 @@ fn main() {
     let username = _matches.get_one::<String>("username").map(String::as_str).unwrap();
     let password = _matches.get_one::<String>("password").map(String::as_str).unwrap();
 
+    println!("Server: {}", server);
+    println!("Port: {}", port);
+    println!("Username: {}", username);
+    println!("Password: {}", password);
 }
