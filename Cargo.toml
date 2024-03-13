@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 clap = "4.5.2"
+native-tls = "0.2.11"
