@@ -1,9 +1,11 @@
 
 mod util;
 mod tls_util;
+mod http_client;
 use util::parse_arguments;
 
 use tls_util::{connect_tls, send_message, read_message};
+use http_client::HttpClient;
 fn main() {
     // Get the parsed arguments
     let _matches = parse_arguments();
@@ -13,16 +15,15 @@ fn main() {
     let username = _matches.get_one::<String>("username").map(String::as_str).unwrap();
     let password = _matches.get_one::<String>("password").map(String::as_str).unwrap();
 
-    // Get the TLS stream
-    let mut stream = connect_tls(server, port).expect("Failed to connect");
+    // Create a new HTTP client
+    let mut client = HttpClient::new();
 
-    // Try to get the home page
-    let request = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", server);
+    // Get the CSRF token
+    let csrf_tokens = client.get_csfr_token(server, port, "/accounts/login/");
 
-    send_message(&mut stream, &request); 
+    // Login to the server
+    let response = client.login(server, port, "/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0]).unwrap();
 
-    // Read the response
-    let response = read_message(&mut stream);
 
     println!("{}", response);
     

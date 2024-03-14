@@ -13,7 +13,10 @@ pub fn connect_tls(host: &str, port: &str) -> Result<TlsStream<TcpStream>, Box<d
 // Send message
 pub fn send_message(stream: &mut TlsStream<TcpStream>, message: &str) -> () {
     let req_bytes = message.as_bytes();
-    stream.write(req_bytes).unwrap();
+    match stream.write(req_bytes) {
+        Ok(_) => (),
+        Err(e) => eprintln!("Failed to send message: {}", e),
+    }
 }
 
 // Read message
