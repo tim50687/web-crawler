@@ -22,7 +22,7 @@ fn main() {
     let csrf_tokens = client.get_csfr_token(server, port, "/accounts/login/");
 
     // Login to the server
-    let response = client.login(server, port, "/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0]).unwrap();
+    let response: String = client.login(server, port, "/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0]).unwrap();
 
 
     println!("{}", response);
