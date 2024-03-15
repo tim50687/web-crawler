@@ -20,11 +20,17 @@ impl HttpClient {
     pub fn get(&mut self, host: &str, port: &str, path: &str, alive: bool) -> String {
         self.ensure_connection(host, port);
         let request;
+
+        // Get the CSRF token and session id
+        let binding = String::from("");
+        let csrf_token = self.cookies.get("csrftoken").unwrap_or(&binding);
+        let sessionid = self.cookies.get("sessionid").unwrap_or(&binding);
         if alive {
-            request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: Keep-Alive\r\n\r\n", path, host);
+            request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: Keep-Alive\r\nCookie: csrftoken={}; sessionid={}\r\n\r\n", path, host, csrf_token, sessionid);
         } else {
-            request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: Close\r\n\r\n", path, host);
+            request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nCookie: csrftoken={}; sessionid={}\r\n\r\n", path, host, csrf_token, sessionid);
         }
+
         send_message(&mut self.stream.as_mut().unwrap(), &request);
         read_message(&mut self.stream.as_mut().unwrap())
     }
@@ -40,6 +46,11 @@ impl HttpClient {
         }
         send_message(&mut self.stream.as_mut().unwrap(), &request);
         Ok(read_message(&mut self.stream.as_mut().unwrap()))
+    }
+
+    pub fn start_web_scraping(&mut self, host: &str, port: &str, path: &str, alive: bool) -> String {
+        let response = self.get(host, port, path, alive);
+        response
     }
 
     // This function will login to the server

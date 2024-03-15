@@ -24,8 +24,10 @@ fn main() {
     // Login to the server
     client.login(server, port, "/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0]).unwrap();
 
+    // Start web scraping
+    let response =  client.start_web_scraping(server, port, "/fakebook/", false);
 
-    // println!("{}", response);
+    println!("{}", response);
     
 }
 
