@@ -45,9 +45,11 @@ impl HttpClient {
 
     // This function will login to the server
     pub fn login(&mut self, host: &str, port: &str, path: &str, data: &str, csrf_token: &str) -> Result<String, Box<dyn std::error::Error>> {
+        
+        let response =  self.post(host, port, path, data, csrf_token, false);
         // reset the connection
         self.reset_connection();
-        self.post(host, port, path, data, csrf_token, false)
+        response
     }
 
     // This function will get the CSRF token
