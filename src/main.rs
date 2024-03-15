@@ -19,13 +19,13 @@ fn main() {
     let mut client = HttpClient::new();
 
     // Get the CSRF token
-    let csrf_tokens = client.get_csfr_token(server, port, "/accounts/login/");
+    let csrf_tokens = client.get_csfr_token_before_login(server, port, "/accounts/login/");
 
     // Login to the server
-    let response: String = client.login(server, port, "/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0]).unwrap();
+    client.login(server, port, "/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0]).unwrap();
 
 
-    println!("{}", response);
+    // println!("{}", response);
     
 }
 

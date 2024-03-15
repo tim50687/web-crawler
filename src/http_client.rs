@@ -25,7 +25,6 @@ impl HttpClient {
         } else {
             request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: Close\r\n\r\n", path, host);
         }
-        println!("{}", request);
         send_message(&mut self.stream.as_mut().unwrap(), &request);
         read_message(&mut self.stream.as_mut().unwrap())
     }
@@ -44,16 +43,27 @@ impl HttpClient {
     }
 
     // This function will login to the server
-    pub fn login(&mut self, host: &str, port: &str, path: &str, data: &str, csrf_token: &str) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn login(&mut self, host: &str, port: &str, path: &str, data: &str, csrf_token: &str) -> Result<(), Box<dyn std::error::Error>> {
         
-        let response =  self.post(host, port, path, data, csrf_token, false);
+        let response =  self.post(host, port, path, data, csrf_token, false)?;
+
+        // Get the session id and csfr token
+        let parts = response.split("csrftoken=").collect::<Vec<&str>>()[1].split(";").collect::<Vec<&str>>();
+        let csrf_token = parts[0];
+        let parts = response.split("sessionid=").collect::<Vec<&str>>()[1].split(";").collect::<Vec<&str>>();
+        let session_id = parts[0];
+        
+        // Store the session id and csrf token
+        self.cookies.insert("csrftoken".to_string(), csrf_token.to_string());
+        self.cookies.insert("sessionid".to_string(), session_id.to_string());
         // reset the connection
         self.reset_connection();
-        response
+        // response
+        Ok(())
     }
 
-    // This function will get the CSRF token
-    pub fn get_csfr_token(&mut self, host: &str, port: &str, path: &str) -> Vec<String> {
+    // This function will get the CSRF token before login
+    pub fn get_csfr_token_before_login(&mut self, host: &str, port: &str, path: &str) -> Vec<String> {
         // Get the response
         let response = self.get(host, port, path, false);
         // Get CSRF token in the headers
@@ -62,7 +72,6 @@ impl HttpClient {
         // Get CSRF token in the payload
         let parts = response.split("csrfmiddlewaretoken").collect::<Vec<&str>>()[1].split("\"").collect::<Vec<&str>>();
         let csrf_payload = parts[2];
-        println!("{} {}", csrf_header, csrf_payload);
 
         // reset the connection
         self.reset_connection();
@@ -80,4 +89,6 @@ impl HttpClient {
     fn reset_connection(&mut self) {
         self.stream = None;
     }
+
+    
 }
