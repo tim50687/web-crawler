@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::{HashMap, VecDeque}, hash::Hash};
 use native_tls::{ TlsStream, TlsConnector};
 use std::net::TcpStream;
 use regex::Regex;
@@ -7,6 +7,10 @@ use crate::{connect_tls, send_message, read_message};
 pub struct HttpClient {
     stream: Option<TlsStream<TcpStream>>,
     cookies: HashMap<String, String>,
+    url_queue: VecDeque<String>, // Queue of URLs to visit
+    visited_urls: HashMap<String, bool>, // URLs that have been visited
+    // Store secret flags
+    secret_flags: Vec<String>,
 }
 
 
@@ -15,6 +19,9 @@ impl HttpClient {
         HttpClient {
             stream: Some(connect_tls(host, port).expect("Failed to connect")),
             cookies: HashMap::new(),
+            url_queue: VecDeque::new(),
+            visited_urls: HashMap::new(),
+            secret_flags: Vec::new(),
         }
     }
     // This function will send a GET request
@@ -49,8 +56,36 @@ impl HttpClient {
 
     // Start web scraping and get the secret message
     pub fn start_web_scraping(&mut self, host: &str, port: &str, path: &str, alive: bool) -> String {
-        let response = self.get(host, port, path, alive);
-        response
+        // Using BFS to visit all the pages
+        // Add the root page to the queue
+        self.enqueue_url(path.to_string());
+        // Start traversing the pages until queue is empty or the 5 secret flags are found
+        while  !self.url_queue.is_empty() && self.secret_flags.len() < 5 {
+            // Get the next URL from the queue
+            let url = self.dequeue_url().unwrap();
+            // Mark the URL as visited
+            self.mark_url_visited(&url);
+
+            let path = "/fakebook/".to_string() + &url;
+            // Get the response
+            let response = self.get(host, port, &path, alive);
+            return response;
+            // // Find the secret flags in the response
+            // let flags = HttpClient::find_secret_flags(&response);
+            // // Add the flags to the secret flags
+            // for flag in flags {
+            //     self.secret_flags.push(flag);
+            // }
+
+            // // Add all the friend's pages to the queue
+            // let friend_pattern = Regex::new(r#"href="/fakebook/(\d+)/""#).unwrap();
+            // for friend in friend_pattern.captures_iter(&response) {
+            //     self.enqueue_url(friend[1].to_string());
+            // }
+        }
+
+        // Return the secret flags
+        self.secret_flags.join("\n")
     }
 
     // This function will login to the server
@@ -100,7 +135,7 @@ impl HttpClient {
 
     // This function will reset the connection
     fn reset_connection(&mut self) {
-        self.stream = None;
+        
     }
 
     fn find_secret_flags(response: &str) -> Vec<String> {
@@ -114,6 +149,23 @@ impl HttpClient {
         }
 
         flags
+    }
+
+    // Adds a URL to the queue if it hasn't been visited
+    fn enqueue_url(&mut self, url: String) {
+        if !self.visited_urls.contains_key(&url) {
+            self.url_queue.push_back(url);
+        }
+    }
+
+    // Marks a URL as visited
+    fn mark_url_visited(&mut self, url: &str) {
+        self.visited_urls.insert(url.to_string(), true);
+    }
+
+    // Retrieves the next URL from the queue, if available
+    fn dequeue_url(&mut self) -> Option<String> {
+        self.url_queue.pop_front()
     }
 
     
