@@ -58,7 +58,7 @@ pub fn read_message(stream: &mut TlsStream<TcpStream>) -> String {
             conn.read_line(&mut size_str);
             let size_hex = size_str.trim_end_matches("\r\n");
             let size = usize::from_str_radix(size_hex, 16);
-    
+            println!("123");
             if size == Ok(0) {
                 break;
             }
