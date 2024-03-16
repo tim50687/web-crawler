@@ -16,7 +16,7 @@ fn main() {
     let password = _matches.get_one::<String>("password").map(String::as_str).unwrap();
 
     // Create a new HTTP client before login
-    let mut client = HttpClient::new();
+    let mut client = HttpClient::new(server, port);
 
     // Get the CSRF token before login
     let csrf_tokens = client.get_csfr_token_before_login(server, port, "/accounts/login/");
@@ -25,7 +25,7 @@ fn main() {
     client.login(server, port, "/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0]).unwrap();
 
     // Start web scraping
-    let response =  client.start_web_scraping(server, port, "/fakebook/", false);
+    let response =  client.start_web_scraping(server, port, "/fakebook/", true);
     println!("{}", response);
 
     
