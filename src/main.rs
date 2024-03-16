@@ -15,10 +15,10 @@ fn main() {
     let username = _matches.get_one::<String>("username").map(String::as_str).unwrap();
     let password = _matches.get_one::<String>("password").map(String::as_str).unwrap();
 
-    // Create a new HTTP client
+    // Create a new HTTP client before login
     let mut client = HttpClient::new();
 
-    // Get the CSRF token
+    // Get the CSRF token before login
     let csrf_tokens = client.get_csfr_token_before_login(server, port, "/accounts/login/");
 
     // Login to the server
@@ -26,8 +26,9 @@ fn main() {
 
     // Start web scraping
     let response =  client.start_web_scraping(server, port, "/fakebook/", false);
-
     println!("{}", response);
+
+    
     
 }
 

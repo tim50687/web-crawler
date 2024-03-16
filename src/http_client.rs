@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use native_tls::{ TlsStream, TlsConnector};
 use std::net::TcpStream;
+use regex::Regex;
 use crate::{connect_tls, send_message, read_message};
 
 pub struct HttpClient {
@@ -48,6 +49,7 @@ impl HttpClient {
         Ok(read_message(&mut self.stream.as_mut().unwrap()))
     }
 
+    // Start web scraping and get the secret message
     pub fn start_web_scraping(&mut self, host: &str, port: &str, path: &str, alive: bool) -> String {
         let response = self.get(host, port, path, alive);
         response
@@ -90,6 +92,17 @@ impl HttpClient {
         vec![csrf_header.to_string(), csrf_payload.to_string()]
     }
 
+    // This function will find the content length in the response
+    pub fn find_content_length(response: &str) -> usize {
+        // Define the regex pattern to match the content length
+        let content_length_pattern = Regex::new(r"content-length: (\d+)").unwrap();
+
+        // Search for and collect the first match
+        let content_length = content_length_pattern.captures(response).unwrap()[1].parse::<usize>().unwrap();
+
+        content_length
+    }
+
     // This function will ensure that the connection is established
     fn ensure_connection(&mut self, host: &str, port: &str) -> () {
         if self.stream.is_none() {
@@ -100,6 +113,21 @@ impl HttpClient {
     fn reset_connection(&mut self) {
         self.stream = None;
     }
+
+    fn find_secret_flags(response: &str) -> Vec<String> {
+        // Define the regex pattern to match the secret flags
+        let flag_pattern = Regex::new(r"<h3 class='secret_flag' style='color:red'>FLAG: ([a-zA-Z0-9]{64})</h3>").unwrap();
+
+        // Search for and collect all matches
+        let mut flags = Vec::new();
+        for cap in flag_pattern.captures_iter(response) {
+            flags.push(cap[1].to_string());
+        }
+
+        flags
+    }
+
+    
 
     
 }
