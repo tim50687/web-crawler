@@ -75,12 +75,38 @@ impl HttpClient {
             // Get the next URL from the queue
             let url = self.dequeue_url().unwrap();
             println!("url is {}", url);
+            println!("length of the map is {:?}", self.visited_urls.len());
             // Mark the URL as visited
             self.mark_url_visited(&url);
 
             let path = "/fakebook/".to_string() + &url;
             // Get the response of the home page
             let mut response = self.get(host, port, &path, alive);
+
+            // Check the status code
+            let status_code = HttpClient::check_status(&response);
+            // Handle the status code
+            match status_code.as_str() {
+                "302" => {
+                    // Get the location
+                    let parts = response.split("Location: ").collect::<Vec<&str>>();
+                    let location = parts[1].split("\r\n").collect::<Vec<&str>>()[0];
+                    // Add the location to the queue
+                    self.enqueue_url(location.to_string());
+                    continue;
+                },
+                "403" => {
+                    continue;
+                },
+                "503" => {
+                    // Add the location to the queue
+                    self.enqueue_url(path.to_string());
+                    continue;
+                },
+                _ => {
+                    // Do nothing
+                }
+            }
             
             // Find the secret flags in the Home page
             self.find_and_store_secret_flags( &response);
@@ -143,10 +169,18 @@ impl HttpClient {
         content_length
     }
 
-    // This function will reset the connection
-    fn reset_connection(&mut self) {
-        
+    // This function will check status 302, 403 and 503
+    fn check_status(response: &str) -> String {
+        // Define the regex pattern to match the status code
+        let status_code_pattern = Regex::new(r"HTTP/1.1 (\d+)").unwrap();
+
+        // Search for and collect the first match
+        let status_code = status_code_pattern.captures(response).unwrap()[1].parse::<u16>().unwrap();
+
+        // Return the status code
+        status_code.to_string()         
     }
+
 
     fn find_secret_flags(response: &str) -> Vec<String> {
         // Define the regex pattern to match the secret flags
@@ -195,7 +229,7 @@ impl HttpClient {
         let friend_pattern = Regex::new(r#"href="/fakebook/(\d+)/""#).unwrap();
         let next_page_pattern = Regex::new(r#"<a href="(/fakebook/\d+/friends/\d+/)">next</a>"#).unwrap();
         loop {
-            println!("{}", _response);
+            
             // Traverse every friend's page
             // First, Find the secret flags in the friend's page
             self.find_and_store_secret_flags( &_response);
