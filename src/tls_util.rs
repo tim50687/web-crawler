@@ -51,7 +51,7 @@ pub fn read_message(stream: &mut TlsStream<TcpStream>) -> String {
 
     // If the response_header is chunked, read the chunks
     if chunked {
-
+        println!("chunked chunk chunk chunk chunk");
         loop {
             // Read the chunk size
             let mut size_str = String::new();
