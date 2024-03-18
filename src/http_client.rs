@@ -96,9 +96,12 @@ impl HttpClient {
             thread.join().unwrap();
         }
 
-
-        // Start traversing the pages until queue is empty or the 5 secret flags are found
-        // self.process_page(host, port, alive);
+        // Get the secret flags
+        let secret_flags = self.secret_flags.lock().unwrap();
+        for flag in secret_flags.iter() {
+            println!("{}", flag);
+        }
+       
         
     }
 
@@ -172,7 +175,7 @@ impl HttpClient {
 
     fn find_secret_flags(response: &str) -> Vec<String> {
         // Define the regex pattern to match the secret flags
-        let flag_pattern = Regex::new(r"<h3 class='secret_flag' style='color:red'>([a-zA-Z0-9]{64})</h3>").unwrap();
+        let flag_pattern = Regex::new(r"FLAG: ([a-zA-Z0-9]{64})").unwrap();
 
         // Search for and collect all matches
         let mut flags = Vec::new();
@@ -253,10 +256,7 @@ impl HttpClient {
             if response == "error" {
                 // Open a new stream
                 self.stream = Some(connect_tls(host, port).expect("Failed to connect"));
-                // Remove from visited_urls
-                let mut visit_url = self.visited_urls.lock().unwrap();
-                visit_url.remove(&url);
-                drop(visit_url);
+                
                 // push the url back to the queue
                 self.enqueue_url(url);
                 continue;
@@ -315,10 +315,7 @@ impl HttpClient {
             if response == "error" {
                 // Open a new stream
                 self.stream = Some(connect_tls(host,  port).expect("Failed to connect"));
-                // Remove from visited_urls
-                let mut visit_url = self.visited_urls.lock().unwrap();
-                visit_url.remove(&url);
-                drop(visit_url);
+                
                 
                 // push the url back to the queue
                 self.enqueue_url(url);
@@ -375,10 +372,7 @@ impl HttpClient {
             if _response == "error" {
                 // Open a new stream
                 self.stream = Some(connect_tls(host, port).expect("Failed to connect"));
-                // Remove from visited_urls
-                let mut visit_url = self.visited_urls.lock().unwrap();
-                visit_url.remove(&url);
-                drop(visit_url);
+                
                 // push the url back to the queue
                 self.enqueue_url(next_page);
                 continue;
