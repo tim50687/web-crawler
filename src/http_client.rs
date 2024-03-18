@@ -4,6 +4,7 @@ use std::net::TcpStream;
 use regex::Regex;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use log::{info, warn, debug, error};
 use crate::{connect_tls, send_message, read_message};
 
 pub struct HttpClient {
@@ -40,13 +41,16 @@ impl HttpClient {
         } else {
             request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nCookie: csrftoken={}; sessionid={}\r\n\r\n", path, host, csrf_token, sessionid);
         }
-        // println!("request is {}", request);
+        println!("request is {}", request);
         send_message(&mut self.stream.as_mut().unwrap(), &request);
-        read_message(&mut self.stream.as_mut().unwrap())
+        match read_message(&mut self.stream.as_mut().unwrap()) {
+            Ok(response) => response,
+            Err(_) => "error".to_string(),
+        }
     }
 
     // This function will send a POST request
-    pub fn post(&mut self, host: &str, port: &str, path: &str, data: &str, csrf_token: &str, alive: bool) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn post(&mut self, host: &str, port: &str, path: &str, data: &str, csrf_token: &str, alive: bool) -> String {
         let request;
         if alive {
             request = format!("POST {} HTTP/1.1\r\nHost: {}\r\nConnection: Keep-Alive\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nCookie: csrftoken={}\r\n\r\n{}", path, host, data.len(), csrf_token, data);
@@ -54,7 +58,10 @@ impl HttpClient {
             request = format!("POST {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nCookie: csrftoken={}\r\n\r\n{}", path, host, data.len(), csrf_token, data);
         }
         send_message(&mut self.stream.as_mut().unwrap(), &request);
-        Ok(read_message(&mut self.stream.as_mut().unwrap()))
+        match read_message(&mut self.stream.as_mut().unwrap()) {
+            Ok(response) => response,
+            Err(_) => "error".to_string(),
+        }
     }
 
     // Start web scraping and get the secret message
@@ -98,7 +105,7 @@ impl HttpClient {
     // This function will login to the server
     pub fn login(&mut self, host: &str, port: &str, path: &str, data: &str, csrf_token: &str) -> Result<(), Box<dyn std::error::Error>> {
         
-        let response =  self.post(host, port, path, data, csrf_token, true)?;
+        let response =  self.post(host, port, path, data, csrf_token, true);
 
         // Get the session id and csfr token
         let parts = response.split("csrftoken=").collect::<Vec<&str>>()[1].split(";").collect::<Vec<&str>>();
@@ -142,7 +149,7 @@ impl HttpClient {
 
     fn clone(&self) -> HttpClient {
         HttpClient {
-            stream: Some(connect_tls("www.3700.network", "443").expect("Failed to connect")),
+            stream: Some(connect_tls("www.3700.network", "443").expect("Failed to connect")), // Open new stream for each thread
             cookies: Arc::clone(&self.cookies),
             url_queue: Arc::clone(&self.url_queue),
             visited_urls: Arc::clone(&self.visited_urls),
@@ -165,7 +172,7 @@ impl HttpClient {
 
     fn find_secret_flags(response: &str) -> Vec<String> {
         // Define the regex pattern to match the secret flags
-        let flag_pattern = Regex::new(r"<h3 class='secret_flag' style='color:red'>FLAG: ([a-zA-Z0-9]{64})</h3>").unwrap();
+        let flag_pattern = Regex::new(r"<h3 class='secret_flag' style='color:red'>([a-zA-Z0-9]{64})</h3>").unwrap();
 
         // Search for and collect all matches
         let mut flags = Vec::new();
@@ -223,7 +230,7 @@ impl HttpClient {
     fn process_page(&mut self, host: &str, port: &str, alive: bool) {
         while {
             let (url_queue, secret_flags) = (self.url_queue.lock().unwrap(), self.secret_flags.lock().unwrap());
-            // println!("map {:?}", self.visited_urls.lock().unwrap().len());
+            println!("map {:?}", self.visited_urls.lock().unwrap().len());
             println!("queue {:?}", url_queue.len());
             println!("secret flag{:?}", secret_flags.len());
             !url_queue.is_empty() && secret_flags.len() != 5
@@ -243,7 +250,18 @@ impl HttpClient {
             // println!("path {}", path);
             // Get the response of the home page
             let mut response = self.get(host, port, &path, alive);
-            println!("home page response\n {}", response);
+            if response == "error" {
+                // Open a new stream
+                self.stream = Some(connect_tls(host, port).expect("Failed to connect"));
+                continue;
+            }
+            // check error 
+            if response.contains("404") || response.contains("403") || response.contains("error"){
+                error!("Error processing URL: {}", path);
+            }
+            
+            
+            // println!("home page response\n {}", response);
             // Check the status code
             let status_code = HttpClient::check_status(&response);
             // Handle the status code
@@ -258,7 +276,7 @@ impl HttpClient {
                     self.enqueue_url(location.to_string());
                     continue;
                 },
-                "403" => {
+                "403" | "404" => {
                     continue;
                 },
                 "503" => {
@@ -277,7 +295,7 @@ impl HttpClient {
             
             // Find the secret flags in the Home page
             self.find_and_store_secret_flags( &response);
-
+            println!("End of user page {:?}", self.stream);
             // Go to friend's page
             // If last character is '/', remove it
             // if url.chars().last().unwrap() == '/' {
@@ -288,12 +306,20 @@ impl HttpClient {
             let path = "/fakebook/".to_string() + &url + "/friends/1/";
             // println!("friend page path {}", path);
             response = self.get(host, port, &path, alive);
-            println!("friend page response\n {}", response);
+            if response == "error" {
+                continue;
+            }
+            // check error 
+            if response.contains("404") || response.contains("403") || response.contains("error"){
+                error!("firend page Error processing URL: {}", path);
+            }
+            // println!("friend page response\n {}", response);
             // println!("response {}", response);
             // println!("Path is {} \n response is {}", url, response);
             // Process the friend's page
             self.process_page_helper(host, port, alive, response);
             // println!("so far secret flag{:?}", self.secret_flags);
+            println!("End of user page and user's friend page {:?}", self.stream);
         }
     }
     
@@ -331,7 +357,15 @@ impl HttpClient {
             // println!("next page {}", next_page);
             // Get the _response of next page
             _response = self.get(host, port, &next_page, alive);
-            println!("next page response\n {}", _response);
+            if _response == "error" {
+                continue;
+            }
+            // check error 
+            if _response.contains("404") || _response.contains("403") || _response.contains("error"){
+                error!("Error processing URL: {}", next_page);
+            }
+            // println!("next page response\n {}", _response);
+            println!("End of next page {:?}", self.stream);
         }
     }
 

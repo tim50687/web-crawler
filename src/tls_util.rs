@@ -1,15 +1,17 @@
 use std::net::TcpStream;
 use std::io::{BufReader, Read, Write, BufRead};
 use native_tls::{ TlsStream, TlsConnector};
-
+use std::time::Duration;
 
 use crate::http_client::HttpClient;
 
 // Create TLS stream
 pub fn connect_tls(host: &str, port: &str) -> Result<TlsStream<TcpStream>, Box<dyn std::error::Error>> {
     let stream = TcpStream::connect(format!("{}:{}", host, port))?;
+    
     let connector = TlsConnector::new()?;
-    let stream = connector.connect(host, stream)?;
+    let mut stream = connector.connect(host, stream)?;
+    stream.get_mut().set_read_timeout(Some(Duration::from_millis(5000)));
     Ok(stream)
 }
 
@@ -23,7 +25,7 @@ pub fn send_message(stream: &mut TlsStream<TcpStream>, message: &str) -> () {
 }
 
 // Read message
-pub fn read_message(stream: &mut TlsStream<TcpStream>) -> String {
+pub fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, String> {
     let mut response_header = String::new();
     let mut conn = BufReader::new(stream);
 
@@ -34,15 +36,22 @@ pub fn read_message(stream: &mut TlsStream<TcpStream>) -> String {
     let mut end_of_headers = false;
     while !end_of_headers {
         let mut line = String::new();
-        let bytes_read = conn.read_line(&mut line);
-        // Check if it's chunked
-        if line.contains("Transfer-Encoding: chunked") {
-            chunked = true;
-        }
-        if line == "\r\n" {
-            end_of_headers = true;
-        } else {
-            response_header.push_str(&line);
+        match conn.read_line(&mut line) {
+            Ok(0) => return Err("error".to_string()),
+            Ok(_) => {
+                if line.contains("Transfer-Encoding: chunked") {
+                    chunked = true;
+                }
+                if line == "\r\n" {
+                    end_of_headers = true;
+                } else {
+                    response_header.push_str(&line);
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                return Err("error".to_string());
+            }
+            Err(e) => return Err("error".to_string()),
         }
     }
 
@@ -71,7 +80,7 @@ pub fn read_message(stream: &mut TlsStream<TcpStream>) -> String {
             conn.read_line(&mut String::new());
 
         }
-        return response_header.clone() + &String::from_utf8_lossy(&chunked_body);
+        return Ok(response_header.clone() + &String::from_utf8_lossy(&chunked_body));
 
     } else { // Not chunked, read the rest of the response_header
 
@@ -81,7 +90,7 @@ pub fn read_message(stream: &mut TlsStream<TcpStream>) -> String {
         let mut payload = vec![0; content_length];
         conn.read_exact(&mut payload);
         // Combine headers and payload into a full response_header
-        return  response_header.clone() + &String::from_utf8_lossy(&payload);
+        return  Ok(response_header.clone() + &String::from_utf8_lossy(&payload));
     }
 
 }
