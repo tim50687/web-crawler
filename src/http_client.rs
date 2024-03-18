@@ -76,7 +76,7 @@ impl HttpClient {
         // Get the response of the home page
         let response = self.get(host, port, &path, alive);
         // Process root page
-        self.process_page_helper(host, port, alive, response);
+        self.process_page_helper(host, port, alive, response, url);
         
         // Multi-threading 5 threads to do the web scraping
         let num_threads = 5;
@@ -253,6 +253,12 @@ impl HttpClient {
             if response == "error" {
                 // Open a new stream
                 self.stream = Some(connect_tls(host, port).expect("Failed to connect"));
+                // Remove from visited_urls
+                let mut visit_url = self.visited_urls.lock().unwrap();
+                visit_url.remove(&url);
+                drop(visit_url);
+                // push the url back to the queue
+                self.enqueue_url(url);
                 continue;
             }
             // check error 
@@ -307,6 +313,15 @@ impl HttpClient {
             // println!("friend page path {}", path);
             response = self.get(host, port, &path, alive);
             if response == "error" {
+                // Open a new stream
+                self.stream = Some(connect_tls(host,  port).expect("Failed to connect"));
+                // Remove from visited_urls
+                let mut visit_url = self.visited_urls.lock().unwrap();
+                visit_url.remove(&url);
+                drop(visit_url);
+                
+                // push the url back to the queue
+                self.enqueue_url(url);
                 continue;
             }
             // check error 
@@ -317,14 +332,14 @@ impl HttpClient {
             // println!("response {}", response);
             // println!("Path is {} \n response is {}", url, response);
             // Process the friend's page
-            self.process_page_helper(host, port, alive, response);
+            self.process_page_helper(host, port, alive, response, url);
             // println!("so far secret flag{:?}", self.secret_flags);
             println!("End of user page and user's friend page {:?}", self.stream);
         }
     }
     
     // Helper function to process the page
-    fn process_page_helper(&mut self, host: &str, port: &str, alive:bool, response: String) {
+    fn process_page_helper(&mut self, host: &str, port: &str, alive:bool, response: String, url: String) {
         let mut _response = response;
         let friend_pattern = Regex::new(r#"<li><a href="/fakebook/(\d+)/""#).unwrap();
         let next_page_pattern = Regex::new(r#"<a href="(/fakebook/\d+/friends/\d+/)">next</a>"#).unwrap();
@@ -358,6 +373,14 @@ impl HttpClient {
             // Get the _response of next page
             _response = self.get(host, port, &next_page, alive);
             if _response == "error" {
+                // Open a new stream
+                self.stream = Some(connect_tls(host, port).expect("Failed to connect"));
+                // Remove from visited_urls
+                let mut visit_url = self.visited_urls.lock().unwrap();
+                visit_url.remove(&url);
+                drop(visit_url);
+                // push the url back to the queue
+                self.enqueue_url(next_page);
                 continue;
             }
             // check error 
