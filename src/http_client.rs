@@ -7,6 +7,7 @@ use std::thread;
 use log::{info, warn, debug, error};
 use crate::{connect_tls, send_message, read_message};
 
+// Struct to store the HTTP client
 pub struct HttpClient {
     stream: Option<TlsStream<TcpStream>>, // Open one stream first for Login and get CSRF token
     cookies: Arc<Mutex<HashMap<String, String>>>, // Store cookies
@@ -16,8 +17,9 @@ pub struct HttpClient {
     secret_flags: Arc<Mutex<Vec<String>>>,
 }
 
-
+// Implementation of the HTTP client
 impl HttpClient {
+    // Constructor
     pub fn new(host: &str, port: &str) -> HttpClient {
         HttpClient {
             stream: Some(connect_tls(host, port).expect("Failed to connect")),
@@ -30,7 +32,6 @@ impl HttpClient {
     // This function will send a GET request
     pub fn get(&mut self, host: &str, port: &str, path: &str, alive: bool) -> String {
         let request;
-
         // Get the CSRF token and session id
         let binding = String::from("");
         let cookies_lock = self.cookies.lock().unwrap(); // Lock the cookies
@@ -41,7 +42,6 @@ impl HttpClient {
         } else {
             request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nCookie: csrftoken={}; sessionid={}\r\n\r\n", path, host, csrf_token, sessionid);
         }
-        println!("request is {}", request);
         send_message(&mut self.stream.as_mut().unwrap(), &request);
         match read_message(&mut self.stream.as_mut().unwrap()) {
             Ok(response) => response,
@@ -70,12 +70,10 @@ impl HttpClient {
         // Add the root page to the queue
         self.enqueue_url(path.to_string());
         let url = self.dequeue_url().unwrap();
-        // Mark the URL as visited
-
         let path = "/fakebook/".to_string() + &url;
         // Get the response of the home page
         let response = self.get(host, port, &path, alive);
-        // Process root page
+        // Process root page, get all root user's friend
         self.process_page_helper(host, port, alive, response, url);
         
         // Multi-threading 5 threads to do the web scraping
@@ -88,10 +86,11 @@ impl HttpClient {
             let alive = alive;
             let mut client = self.clone();
             threads.push(thread::spawn(move || {
+                // BFS to visit all the pages
                 client.process_page(&host, &port, alive);
             }));
         }
-
+        // Join the threads
         for thread in threads {
             thread.join().unwrap();
         }
@@ -101,13 +100,10 @@ impl HttpClient {
         for flag in secret_flags.iter() {
             println!("{}", flag);
         }
-       
-        
     }
 
     // This function will login to the server
     pub fn login(&mut self, host: &str, port: &str, path: &str, data: &str, csrf_token: &str) -> Result<(), Box<dyn std::error::Error>> {
-        
         let response =  self.post(host, port, path, data, csrf_token, true);
 
         // Get the session id and csfr token
@@ -135,7 +131,6 @@ impl HttpClient {
         let parts = response.split("csrfmiddlewaretoken").collect::<Vec<&str>>()[1].split("\"").collect::<Vec<&str>>();
         let csrf_payload = parts[2];
 
-
         vec![csrf_header.to_string(), csrf_payload.to_string()]
     }
 
@@ -143,13 +138,13 @@ impl HttpClient {
     pub fn find_content_length(response: &str) -> usize {
         // Define the regex pattern to match the content length
         let content_length_pattern = Regex::new(r"content-length: (\d+)").unwrap();
-
         // Search for and collect the first match
         let content_length = content_length_pattern.captures(response).unwrap()[1].parse::<usize>().unwrap();
 
         content_length
     }
 
+    // This function will clone the HTTP client
     fn clone(&self) -> HttpClient {
         HttpClient {
             stream: Some(connect_tls("www.3700.network", "443").expect("Failed to connect")), // Open new stream for each thread
@@ -220,7 +215,6 @@ impl HttpClient {
     fn has_duplicate(&mut self, url: &str) -> bool {
         let visited_urls = self.visited_urls.lock().unwrap();
         if visited_urls.contains_key(&url.to_string()) || url.to_string() == ""{
-            // println!("duplicate {}", url.to_string());
             return true;
         } 
         false
@@ -233,15 +227,12 @@ impl HttpClient {
     fn process_page(&mut self, host: &str, port: &str, alive: bool) {
         while {
             let (url_queue, secret_flags) = (self.url_queue.lock().unwrap(), self.secret_flags.lock().unwrap());
-            println!("map {:?}", self.visited_urls.lock().unwrap().len());
-            println!("queue {:?}", url_queue.len());
             println!("secret flag{:?}", secret_flags.len());
             !url_queue.is_empty() && secret_flags.len() != 5
         } {
             
             // Get the next URL from the queue
             let mut url = self.dequeue_url().unwrap();
-            // println!("url {}", url);
             
             
             // If last character is '/', remove it
@@ -250,9 +241,9 @@ impl HttpClient {
             }
 
             let path = "/fakebook/".to_string() + &url + "/";
-            // println!("path {}", path);
             // Get the response of the home page
             let mut response = self.get(host, port, &path, alive);
+            // If read message has any error. e.x. timeout
             if response == "error" {
                 // Open a new stream
                 self.stream = Some(connect_tls(host, port).expect("Failed to connect"));
@@ -266,8 +257,6 @@ impl HttpClient {
                 error!("Error processing URL: {}", path);
             }
             
-            
-            // println!("home page response\n {}", response);
             // Check the status code
             let status_code = HttpClient::check_status(&response);
             // Handle the status code
@@ -276,7 +265,6 @@ impl HttpClient {
                 "302" => {
                     // Get the location                  
                     let parts = response.split("location: ").collect::<Vec<&str>>();
-                    // println!("parts {:?}", parts);
                     let location = parts[1].split("\r\n").collect::<Vec<&str>>()[0];
                     // Add the location to the queue
                     self.enqueue_url(location.to_string());
@@ -295,28 +283,18 @@ impl HttpClient {
                 },
                 _ => {
                     // Do nothing
-                    // println!("status code {}", status_code);
                 }
             }
             
             // Find the secret flags in the Home page
             self.find_and_store_secret_flags( &response);
-            println!("End of user page {:?}", self.stream);
             // Go to friend's page
-            // If last character is '/', remove it
-            // if url.chars().last().unwrap() == '/' {
-            //     println!("dwqwqdqwdqw {}", url);
-            //     url = url[..url.len() - 1].to_string();
-            // }
-            
             let path = "/fakebook/".to_string() + &url + "/friends/1/";
-            // println!("friend page path {}", path);
             response = self.get(host, port, &path, alive);
+            // If read message has any error. e.x. timeout
             if response == "error" {
                 // Open a new stream
                 self.stream = Some(connect_tls(host,  port).expect("Failed to connect"));
-                
-                
                 // push the url back to the queue
                 self.enqueue_url(url);
                 continue;
@@ -325,13 +303,8 @@ impl HttpClient {
             if response.contains("404") || response.contains("403") || response.contains("error"){
                 error!("firend page Error processing URL: {}", path);
             }
-            // println!("friend page response\n {}", response);
-            // println!("response {}", response);
-            // println!("Path is {} \n response is {}", url, response);
             // Process the friend's page
             self.process_page_helper(host, port, alive, response, url);
-            // println!("so far secret flag{:?}", self.secret_flags);
-            println!("End of user page and user's friend page {:?}", self.stream);
         }
     }
     
@@ -366,9 +339,9 @@ impl HttpClient {
             }
             // Get the next page
             let next_page = next_page.unwrap()[1].to_string();
-            // println!("next page {}", next_page);
             // Get the _response of next page
             _response = self.get(host, port, &next_page, alive);
+            // If read message has any error. e.x. timeout
             if _response == "error" {
                 // Open a new stream
                 self.stream = Some(connect_tls(host, port).expect("Failed to connect"));
@@ -381,8 +354,6 @@ impl HttpClient {
             if _response.contains("404") || _response.contains("403") || _response.contains("error"){
                 error!("Error processing URL: {}", next_page);
             }
-            // println!("next page response\n {}", _response);
-            println!("End of next page {:?}", self.stream);
         }
     }
 

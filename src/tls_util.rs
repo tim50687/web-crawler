@@ -8,7 +8,6 @@ use crate::http_client::HttpClient;
 // Create TLS stream
 pub fn connect_tls(host: &str, port: &str) -> Result<TlsStream<TcpStream>, Box<dyn std::error::Error>> {
     let stream = TcpStream::connect(format!("{}:{}", host, port))?;
-    
     let connector = TlsConnector::new()?;
     let mut stream = connector.connect(host, stream)?;
     stream.get_mut().set_read_timeout(Some(Duration::from_millis(5000)));
@@ -82,7 +81,7 @@ pub fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, String>
         }
         return Ok(response_header.clone() + &String::from_utf8_lossy(&chunked_body));
 
-    } else { // Not chunked, read the rest of the response_header
+    } else { // If not chunked, read the rest of the response_header
 
         // Get the content length
         let content_length = HttpClient::find_content_length(&response_header);

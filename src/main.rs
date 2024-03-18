@@ -26,11 +26,6 @@ fn main() {
 
     // Start web scraping
     client.start_web_scraping(server, port, "", true);
-    // println!("{}", response);
-
-   
-    
-    
 }
 
 
