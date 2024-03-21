@@ -7,6 +7,9 @@ use util::parse_arguments;
 use tls_util::{connect_tls, send_message, read_message};
 use http_client::HttpClient;
 
+#[macro_use]
+extern crate lazy_static;
+
 #[tokio::main]
 async fn main() {
     // Get the parsed arguments

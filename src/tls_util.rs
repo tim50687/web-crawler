@@ -2,18 +2,23 @@
 // use std::io::{BufReader, Read, Write, BufRead};
 use native_tls;
 // use std::time::Duration;
+use flate2::read::GzDecoder;
+use std::io::prelude::*;
 
 use tokio::net::TcpStream;
 use tokio_native_tls::{TlsConnector, TlsStream};
 // use native_tls::Identity;
-use tokio::time::timeout;
 use tokio::io::AsyncWriteExt;
-use tokio::io::{AsyncBufReadExt, BufReader, AsyncReadExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::time::timeout;
 
 use crate::http_client::HttpClient;
 
 // Create TLS stream
-pub async fn connect_tls(host: &str, port: &str) -> Result<TlsStream<TcpStream>, Box<dyn std::error::Error>> {
+pub async fn connect_tls(
+    host: &str,
+    port: &str,
+) -> Result<TlsStream<TcpStream>, Box<dyn std::error::Error>> {
     let stream = TcpStream::connect(format!("{}:{}", host, port)).await?;
     let connector = TlsConnector::from(native_tls::TlsConnector::builder().build()?);
     let mut stream = connector.connect(host, stream).await?;
@@ -25,9 +30,9 @@ pub async fn send_message(stream: &mut TlsStream<TcpStream>, message: &str) -> (
     // println!("Sending message: {}", message);
     let req_bytes = message.as_bytes();
     match stream.write(req_bytes).await {
-    Ok(_) => (),
-    Err(e) => eprintln!("Failed to send message: {}", e),
-}
+        Ok(_) => (),
+        Err(e) => eprintln!("Failed to send message: {}", e),
+    }
 }
 
 // Read message
@@ -55,13 +60,12 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
                 } else {
                     response_header.push_str(&line);
                 }
-            },
+            }
             Ok(Err(e)) => return Err(format!("Error reading line: {}", e)),
             Err(_) => return Err("Read line timeout".to_string()),
         }
     }
     // println!("response_header: {}", response_header);
-
 
     let mut chunked_body = Vec::new();
 
@@ -79,6 +83,8 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
                 Ok(Err(e)) => return Err(format!("Error reading line: {}", e)),
                 Err(_) => return Err("Read line timeout".to_string()),
             }
+
+            dbg!(&size_str);
             // get the size of the chunk
             let size_hex = size_str.trim_end_matches("\r\n");
             let size = usize::from_str_radix(size_hex, 16);
@@ -106,10 +112,14 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
                 Err(_) => return Err("Read CRLF timeout".to_string()),
             }
 
+            let mut d = GzDecoder::new(chunked_body.as_slice());
+            let mut s = String::new();
+            d.read_to_string(&mut s).unwrap();
+            chunked_body = s.as_bytes().to_vec();
         }
-        return Ok(response_header.clone() + &String::from_utf8_lossy(&chunked_body));
-
-    } else { // If not chunked, read the rest of the response_header
+        return Ok(response_header.clone() + "\r\n\r\n" + &String::from_utf8_lossy(&chunked_body));
+    } else {
+        // If not chunked, read the rest of the response_header
 
         // Get the content length
         let content_length = HttpClient::find_content_length(&response_header);
@@ -124,8 +134,16 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
             Ok(Err(e)) => return Err(format!("Error reading payload: {}", e)),
             Err(_) => return Err("Read payload timeout".to_string()),
         }
+        let mut d = GzDecoder::new(payload.as_slice());
+        let mut s = String::new();
+        if !payload.is_empty() {
+            match d.read_to_string(&mut s) {
+                Ok(_) => {}
+                Err(_) => return Err(format!("Error decompress"))
+            }
+        }
+        
         // Combine headers and payload into a full response_header
-        return  Ok(response_header.clone() + &String::from_utf8_lossy(&payload));
+        return Ok(response_header.clone() + "\r\n\r\n" + &s);
     }
-
 }
