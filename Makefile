@@ -1,5 +1,5 @@
 move: complie
-	mv ./target/release/project3-bgp-router ./crawler
+	mv ./target/release/web_crawler ./crawler
 
 complie: client
 	~/.cargo/bin/cargo build -r
