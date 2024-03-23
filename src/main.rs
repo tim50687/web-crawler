@@ -24,10 +24,10 @@ async fn main() {
     let mut client = HttpClient::new(server, port).await;
 
     // Get the CSRF token before login
-    let csrf_tokens = client.get_csfr_token_and_sessionID_before_login(server, port, "/accounts/login/").await;
+    let csrf_tokens = client.get_csfr_token_and_sessionID_before_login("/accounts/login/").await;
 
     // Login to the server
-    client.login(server, port, "/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0], &csrf_tokens[2]).await.unwrap();
+    client.login("/accounts/login/", &format!("username={}&password={}&csrfmiddlewaretoken={}&next=/fakebook/", username, password, csrf_tokens[1]), &csrf_tokens[0], &csrf_tokens[2]).await.unwrap();
 
     // Start web scraping
     // Count the time it spent to scrape the web
