@@ -1,12 +1,7 @@
 # Web Crawler for Fakebook
 
 ## High-level Approach
-1. Parse command-line arguments to determine the server, port, username, and password.
-2. Use TLS to connect to the Fakebook server
-3. Send an HTTP POST request to the login form URL to authenticate with the provided username and password.
-4. Start crawling the Fakebook site, parsing each page's HTML to extract flags in the specified format.
-5. Use hashmap to keep tracking the page that we already crawled to prevent infinite loop.
-6. Print out the five flags discovered during the crawl.
+The web crawler for Fakebook starts by parsing command-line arguments to determine the server, port, username, and password. It then establishes a TLS connection to the Fakebook server and sends an HTTP POST request to the login form URL to authenticate. Upon successful authentication, the crawler begins crawling the Fakebook site, extracting flags from each page's HTML in the specified format. To prevent infinite loops, a hashmap is used to track visited pages. Finally, the crawler prints out the five flags discovered during the crawl.
 
 ## Challenges Faced
 - Implementing HTTP POST for login authentication.
@@ -18,3 +13,5 @@
 2. Use unit tests to ensure that the crawler correctly handles HTTP requests, cookies, and status codes.
 3. Conduct integration tests to simulate crawling on a small subset of Fakebook pages and verify flag extraction.
 
+## Wrap Up
+This web crawler project provided valuable hands-on experience with the HTTP protocol, web crawling, and handling various HTTP status codes. The implementation successfully achieved its goal of extracting the five secret flags from the Fakebook website. The challenges faced during the project, such as implementing HTTP POST and managing cookies, were overcome through research and experimentation. Overall, the project deepened understanding of web technologies and provided practical skills in web crawling and HTTP protocol handling.
