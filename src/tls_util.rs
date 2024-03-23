@@ -27,7 +27,6 @@ pub async fn connect_tls(
 
 // Send message
 pub async fn send_message(stream: &mut TlsStream<TcpStream>, message: &str) -> () {
-    // println!("Sending message: {}", message);
     let req_bytes = message.as_bytes();
     match stream.write(req_bytes).await {
         Ok(_) => (),
@@ -65,13 +64,11 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
             Err(_) => return Err("Read line timeout".to_string()),
         }
     }
-    // println!("response_header: {}", response_header);
 
     let mut chunked_body = Vec::new();
 
     // If the response_header is chunked, read the chunks
     if chunked {
-        println!("chunked chunk chunk chunk chunk");
         loop {
             // Read the chunk size
             let mut size_str = String::new();
@@ -84,11 +81,10 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
                 Err(_) => return Err("Read line timeout".to_string()),
             }
 
-            dbg!(&size_str);
             // get the size of the chunk
             let size_hex = size_str.trim_end_matches("\r\n");
             let size = usize::from_str_radix(size_hex, 16);
-            println!("123");
+
             if size == Ok(0) {
                 break;
             }
@@ -112,6 +108,7 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
                 Err(_) => return Err("Read CRLF timeout".to_string()),
             }
 
+            // Decompress gzip
             let mut d = GzDecoder::new(chunked_body.as_slice());
             let mut s = String::new();
             d.read_to_string(&mut s).unwrap();
@@ -123,7 +120,6 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
 
         // Get the content length
         let content_length = HttpClient::find_content_length(&response_header);
-        // println!("content_length: {}", content_length);
         // Read the specified number of bytes for the payload
         let mut payload = vec![0; content_length];
         // Read payload and check if timeout
@@ -134,15 +130,17 @@ pub async fn read_message(stream: &mut TlsStream<TcpStream>) -> Result<String, S
             Ok(Err(e)) => return Err(format!("Error reading payload: {}", e)),
             Err(_) => return Err("Read payload timeout".to_string()),
         }
+
+        // Decompress gzip
         let mut d = GzDecoder::new(payload.as_slice());
         let mut s = String::new();
         if !payload.is_empty() {
             match d.read_to_string(&mut s) {
                 Ok(_) => {}
-                Err(_) => return Err(format!("Error decompress"))
+                Err(_) => return Err(format!("Error decompress")),
             }
         }
-        
+
         // Combine headers and payload into a full response_header
         return Ok(response_header.clone() + "\r\n\r\n" + &s);
     }

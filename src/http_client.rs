@@ -1,5 +1,4 @@
 use crate::{connect_tls, read_message, send_message};
-use log::error;
 use regex::Regex;
 use std::sync::Arc;
 use std::{
