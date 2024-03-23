@@ -60,5 +60,5 @@ async fn main() {
     client.start_web_scraping(server, port, "", true).await;
 
     let duration = start.elapsed();
-    eprintln!("Time elapsed in web scraping is: {:?}", duration);
+    // eprintln!("Time elapsed in web scraping is: {:?}", duration);
 }

@@ -1,7 +1,3 @@
-// use std::net::TcpStream;
-// use std::io::{BufReader, Read, Write, BufRead};
-use native_tls;
-// use std::time::Duration;
 use flate2::read::GzDecoder;
 use std::io::prelude::*;
 
@@ -30,7 +26,8 @@ pub async fn send_message(stream: &mut TlsStream<TcpStream>, message: &str) -> (
     let req_bytes = message.as_bytes();
     match stream.write(req_bytes).await {
         Ok(_) => (),
-        Err(e) => eprintln!("Failed to send message: {}", e),
+        // Err(e) => eprintln!("Failed to send message: {}", e),
+        Err(_) => {}
     }
 }
 

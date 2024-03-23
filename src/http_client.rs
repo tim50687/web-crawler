@@ -128,7 +128,8 @@ impl HttpClient {
         for task in threads {
             match task.await {
                 Ok(_) => (),
-                Err(e) => eprintln!("Task failed: {:?}", e),
+                // Err(e) => eprintln!("Task failed: {:?}", e)
+                Err(_) => {}
             }
         }
 
@@ -252,8 +253,8 @@ impl HttpClient {
 
         // If read message has any error. e.x. timeout
         while response == "error" {
-            eprintln!("timeout error");
-            eprintln!("{}", path);
+            // eprintln!("timeout error");
+            // eprintln!("{}", path);
             self.stream = Some(
                 connect_tls(&self.server, &self.port)
                     .await
@@ -329,7 +330,7 @@ impl HttpClient {
     // Retrieves the next URL from the queue, if available
     async fn dequeue_url(&mut self) -> Option<String> {
         let mut url_queue = self.url_queue.lock().await;
-        eprintln!("current queue: {}", url_queue.len());
+        // eprintln!("current queue: {}", url_queue.len());
         // eprintln!("url: {}", url_queue.front());
         url_queue.pop_front()
     }
@@ -360,7 +361,7 @@ impl HttpClient {
         while {
             let (url_queue, secret_flags) =
                 (self.url_queue.lock().await, self.secret_flags.lock().await);
-            eprintln!("secret flag{:?}", secret_flags.len());
+            // eprintln!("secret flag{:?}", secret_flags.len());
             secret_flags.len() != 5
         } {
             let cur_time = Instant::now();
@@ -385,11 +386,11 @@ impl HttpClient {
                 self.preceed_url(&path, alive).await;
             }
 
-            eprintln!(
-                "Time spent: {}ms, worker: {}",
-                cur_time.elapsed().as_millis(),
-                self.num
-            );
+            // eprintln!(
+            //     "Time spent: {}ms, worker: {}",
+            //     cur_time.elapsed().as_millis(),
+            //     self.num
+            // );
         }
     }
 
