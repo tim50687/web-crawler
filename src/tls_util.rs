@@ -1,13 +1,8 @@
-// use std::net::TcpStream;
-// use std::io::{BufReader, Read, Write, BufRead};
-use native_tls;
-// use std::time::Duration;
 use flate2::read::GzDecoder;
 use std::io::prelude::*;
 
 use tokio::net::TcpStream;
 use tokio_native_tls::{TlsConnector, TlsStream};
-// use native_tls::Identity;
 use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::time::timeout;
@@ -19,10 +14,10 @@ pub async fn connect_tls(
     host: &str,
     port: &str,
 ) -> Result<TlsStream<TcpStream>, Box<dyn std::error::Error>> {
-    let stream = TcpStream::connect(format!("{}:{}", host, port)).await?;
+    let tcp_stream = TcpStream::connect(format!("{}:{}", host, port)).await?;
     let connector = TlsConnector::from(native_tls::TlsConnector::builder().build()?);
-    let mut stream = connector.connect(host, stream).await?;
-    Ok(stream)
+    let tls_stream = connector.connect(host, tcp_stream).await?;
+    Ok(tls_stream)
 }
 
 // Send message
