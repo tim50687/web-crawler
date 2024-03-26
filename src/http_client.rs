@@ -12,8 +12,8 @@ use tokio_native_tls::TlsStream;
 lazy_static! {
     // Define the regex pattern to match the status code
     static ref STATUS_CODE_PATTERN: Regex = Regex::new(r"HTTP/1.1 (\d+)").unwrap();
-    static ref FRIEND_PATTERN: Regex = Regex::new(r#"<li><a href="(/fakebook/\d+/)""#).unwrap();
-    static ref NEXT_PAGE_PATTERN: Regex = Regex::new(r#"<a href="(/fakebook/\d+/friends/\d+/)">next</a>"#).unwrap();
+    // Define the regex pattern to match href link
+    static ref HREF_PATTERN: Regex = Regex::new(r#"href="(/fakebook/\d.*)""#).unwrap();
     // Define the regex pattern to match the secret flags
     static ref FLAG_PATTERN: Regex = Regex::new(r"FLAG: ([a-zA-Z0-9]{64})").unwrap();
     // Define the regex pattern to match the content length
@@ -100,14 +100,8 @@ impl HttpClient {
         path: &str,
         alive: bool,
     ) -> () {
-        // Using BFS to visit all the pages
         // Add the root page to the queue
         self.enqueue_url("/fakebook/".to_string() + path).await;
-        let url = self.dequeue_url().await.unwrap();
-        // Get the response of the home page
-        let response = self.get(&url, alive).await;
-        // Process root page, get all root user's friend
-        self.process_page_helper(response).await;
 
         // Multi-threading 5 threads to do the web scraping
         let num_threads = 5;
@@ -169,12 +163,19 @@ impl HttpClient {
 
     // This function will get the CSRF token before login
     pub async fn get_csfr_token_and_sessionID_before_login(&mut self, path: &str) -> Vec<String> {
-        let mut response = String::from("error");
+        // Get response
+        let mut response = self.get(path, true).await;
 
+        // If read message has any error. e.x. timeout
         while response == "error" {
+            // Create a new socket
+            self.stream = Some(
+                connect_tls(&self.server, &self.port)
+                    .await
+                    .expect("Failed to connect"),
+            );
             response = self.get(path, true).await;
         }
-        // Get the response
 
         // Get CSRF token in the headers
         let parts = response.split("csrftoken=").collect::<Vec<&str>>()[1]
@@ -227,43 +228,37 @@ impl HttpClient {
         }
     }
 
-    // This function will check status 302, 403 and 503
-    fn check_status(response: &str) -> String {
-        // Search for and collect the first match
-        let status_code = STATUS_CODE_PATTERN.captures(&response[..50]).unwrap()[1]
-            .parse::<u16>()
-            .unwrap();
-
-        // Return the status code
-        status_code.to_string()
-    }
-
-    async fn preceed_url(&mut self, url: &str, alive: bool) -> u8 {
-        let path = url.to_string();
-        let flag;
-        if url.contains("/friends/") {
-            flag = true;
-        } else {
-            flag = false;
-        }
-
+    // This function will proceed to the given url and handle the response
+    async fn proceed_url(&mut self, url: &str, alive: bool) {
         let mut response;
-        response = self.get(&path, alive).await;
+        response = self.get(url, alive).await;
 
         // If read message has any error. e.x. timeout
         while response == "error" {
             eprintln!("timeout error");
-            eprintln!("{}", path);
+            eprintln!("{}", url);
+            // Create a new socket
             self.stream = Some(
                 connect_tls(&self.server, &self.port)
                     .await
                     .expect("Failed to connect"),
             );
-            response = self.get(&path, alive).await;
+            response = self.get(url, alive).await;
         }
 
+        // Split the response into header and content sections
         let res_vec: Vec<&str> = response.split("\r\n\r\n").collect();
 
+        // Switch to a new socket if server close the current port
+        if res_vec[0].contains("Connection: close") {
+            self.stream = Some(
+                connect_tls(&self.server, &self.port)
+                    .await
+                    .expect("Failed to connect"),
+            );
+        }
+
+        // Get status code
         let status_code = STATUS_CODE_PATTERN.captures(res_vec[0]).unwrap()[1].to_string();
 
         match status_code.as_str() {
@@ -274,29 +269,31 @@ impl HttpClient {
                 let location = parts[1].split("\r\n").collect::<Vec<&str>>()[0];
                 // Add the location to the queue
                 self.enqueue_url(location.to_string()).await;
-                return 0;
             }
-            "403" | "404" => {
-                return 0;
-            }
+            "403" | "404" => {}
             "503" => {
                 // Add the url back to the queue
                 self.enqueue_url(url.to_string()).await;
-                return 0;
             }
-            _ => {
-                if !flag {
-                    self.find_and_store_secret_flags(res_vec[1]).await;
-                    return 1;
-                } else {
-                    // Process the friend's page
-                    self.process_page_helper(res_vec[1].to_string()).await;
-                    return 2;
+            "200" => {
+                self.find_and_store_secret_flags(res_vec[1]).await;
+                let mut mat_vec = vec![];
+                for mat in HREF_PATTERN.captures_iter(res_vec[1]) {
+                    if self.has_duplicate(&mat[1]).await {
+                        continue;
+                    }
+
+                    mat_vec.push(mat[1].to_string());
+
+                    self.mark_url_visited(&mat[1]).await;
                 }
+                self.enqueue_url_vec(mat_vec).await;
             }
+            _ => {}
         }
     }
 
+    // This function will scan through the html to find secret flag
     fn find_secret_flags(response: &str) -> Vec<String> {
         // Search for and collect all matches
         let mut flags = Vec::new();
@@ -307,12 +304,13 @@ impl HttpClient {
         flags
     }
 
-    // Adds a URL to the queue if it hasn't been visited
+    // Adds a URL to the queue
     async fn enqueue_url(&mut self, url: String) {
         let mut url_queue = self.url_queue.lock().await;
         url_queue.push_back(url);
     }
 
+    // Adds a vector of URLs to the queue
     async fn enqueue_url_vec(&mut self, urls: Vec<String>) {
         let mut url_queue = self.url_queue.lock().await;
         for url in urls.into_iter() {
@@ -358,8 +356,7 @@ impl HttpClient {
     // 3. See if there's next page
     async fn process_page(&mut self, host: &str, port: &str, alive: bool) {
         while {
-            let (url_queue, secret_flags) =
-                (self.url_queue.lock().await, self.secret_flags.lock().await);
+            let secret_flags = self.secret_flags.lock().await;
             eprintln!("secret flag{:?}", secret_flags.len());
             secret_flags.len() != 5
         } {
@@ -372,18 +369,7 @@ impl HttpClient {
                 }
             };
 
-            // If last character is '/', remove it
-            // if url.chars().last().unwrap() == '/' {
-            //     url = url[..url.len() - 1].to_string();
-            // }
-
-            let res = self.preceed_url(&url, alive).await;
-
-            if res == 1 {
-                // Go to friend's page
-                let path = url.to_string() + "friends/1/";
-                self.preceed_url(&path, alive).await;
-            }
+            self.proceed_url(&url, alive).await;
 
             eprintln!(
                 "Time spent: {}ms, worker: {}",
@@ -391,35 +377,5 @@ impl HttpClient {
                 self.num
             );
         }
-    }
-
-    // Helper function to process the page
-    async fn process_page_helper(&mut self, response: String) {
-        let mut tmp_queue: Vec<String> = vec![];
-
-        // Traverse every friend's page
-        // First, Find the secret flags in the friend's page
-        self.find_and_store_secret_flags(&response).await;
-
-        // Find friend in current page
-        for friend in FRIEND_PATTERN.captures_iter(&response) {
-            // Check if the friend's page has been visited or is root page
-            if self.has_duplicate(&friend[1]).await {
-                continue;
-            }
-
-            // self.enqueue_url(friend[1].to_string()).await;
-            tmp_queue.push(friend[1].to_string());
-            // Mark the URL as visited
-            self.mark_url_visited(&friend[1].to_string()).await;
-        }
-
-        // See if there's next page
-        let next_page = NEXT_PAGE_PATTERN.captures(&response);
-        if !next_page.is_none() {
-            self.enqueue_url(next_page.unwrap()[1].to_string()).await;
-        }
-
-        self.enqueue_url_vec(tmp_queue).await;
     }
 }
