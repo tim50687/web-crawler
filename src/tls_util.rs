@@ -25,7 +25,7 @@ pub async fn send_message(stream: &mut TlsStream<TcpStream>, message: &str) -> (
     let req_bytes = message.as_bytes();
     match stream.write(req_bytes).await {
         Ok(_) => (),
-        Err(e) => eprintln!("Failed to send message: {}", e),
+        Err(_) => {}
     }
 }
 

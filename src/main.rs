@@ -54,11 +54,5 @@ async fn main() {
         .unwrap();
 
     // Start web scraping
-    // Count the time it spent to scrape the web
-    let start = std::time::Instant::now();
-
     client.start_web_scraping(server, port, "", true).await;
-
-    let duration = start.elapsed();
-    eprintln!("Time elapsed in web scraping is: {:?}", duration);
 }

@@ -122,7 +122,7 @@ impl HttpClient {
         for task in threads {
             match task.await {
                 Ok(_) => (),
-                Err(e) => eprintln!("Task failed: {:?}", e),
+                Err(_) => {}
             }
         }
 
@@ -235,8 +235,6 @@ impl HttpClient {
 
         // If read message has any error. e.x. timeout
         while response == "error" {
-            eprintln!("timeout error");
-            eprintln!("{}", url);
             // Create a new socket
             self.stream = Some(
                 connect_tls(&self.server, &self.port)
@@ -327,8 +325,6 @@ impl HttpClient {
     // Retrieves the next URL from the queue, if available
     async fn dequeue_url(&mut self) -> Option<String> {
         let mut url_queue = self.url_queue.lock().await;
-        eprintln!("current queue: {}", url_queue.len());
-        // eprintln!("url: {}", url_queue.front());
         url_queue.pop_front()
     }
 
@@ -357,10 +353,8 @@ impl HttpClient {
     async fn process_page(&mut self, host: &str, port: &str, alive: bool) {
         while {
             let secret_flags = self.secret_flags.lock().await;
-            eprintln!("secret flag{:?}", secret_flags.len());
             secret_flags.len() != 5
         } {
-            let cur_time = Instant::now();
             // Get the next URL from the queue
             let url = match self.dequeue_url().await {
                 Some(url) => url,
@@ -370,12 +364,6 @@ impl HttpClient {
             };
 
             self.proceed_url(&url, alive).await;
-
-            eprintln!(
-                "Time spent: {}ms, worker: {}",
-                cur_time.elapsed().as_millis(),
-                self.num
-            );
         }
     }
 }
