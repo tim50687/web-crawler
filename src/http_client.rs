@@ -14,6 +14,7 @@ lazy_static! {
     static ref STATUS_CODE_PATTERN: Regex = Regex::new(r"HTTP/1.1 (\d+)").unwrap();
     static ref FRIEND_PATTERN: Regex = Regex::new(r#"<li><a href="(/fakebook/\d+/)""#).unwrap();
     static ref NEXT_PAGE_PATTERN: Regex = Regex::new(r#"<a href="(/fakebook/\d+/friends/\d+/)">next</a>"#).unwrap();
+    static ref HREF_PATTERN: Regex = Regex::new(r#"href="(/fakebook/\d.*)""#).unwrap();
     // Define the regex pattern to match the secret flags
     static ref FLAG_PATTERN: Regex = Regex::new(r"FLAG: ([a-zA-Z0-9]{64})").unwrap();
     // Define the regex pattern to match the content length
@@ -238,9 +239,12 @@ impl HttpClient {
         status_code.to_string()
     }
 
-    async fn preceed_url(&mut self, url: &str, alive: bool) -> u8 {
+    // This function will proceed to the given url and handle the response
+    async fn proceed_url(&mut self, url: &str, alive: bool) -> u8 {
         let path = url.to_string();
         let flag;
+
+        // The given url is a friend page
         if url.contains("/friends/") {
             flag = true;
         } else {
@@ -254,6 +258,7 @@ impl HttpClient {
         while response == "error" {
             eprintln!("timeout error");
             eprintln!("{}", path);
+            // Create a new socket
             self.stream = Some(
                 connect_tls(&self.server, &self.port)
                     .await
@@ -262,8 +267,10 @@ impl HttpClient {
             response = self.get(&path, alive).await;
         }
 
+        // Split the response into header and content sections
         let res_vec: Vec<&str> = response.split("\r\n\r\n").collect();
 
+        // Get status code
         let status_code = STATUS_CODE_PATTERN.captures(res_vec[0]).unwrap()[1].to_string();
 
         match status_code.as_str() {
@@ -285,11 +292,18 @@ impl HttpClient {
                 return 0;
             }
             _ => {
+                // 200
                 if !flag {
                     self.find_and_store_secret_flags(res_vec[1]).await;
+                    // for mat in HREF_PATTERN.captures_iter(res_vec[1]) {
+                    //     dbg!(mat[1].to_string());
+                    // }
                     return 1;
                 } else {
                     // Process the friend's page
+                    // for mat in HREF_PATTERN.captures_iter(res_vec[1]) {
+                    //     dbg!(mat[1].to_string(), 2);
+                    // }
                     self.process_page_helper(res_vec[1].to_string()).await;
                     return 2;
                 }
@@ -297,6 +311,7 @@ impl HttpClient {
         }
     }
 
+    // This function will scan through the html to find secret flag
     fn find_secret_flags(response: &str) -> Vec<String> {
         // Search for and collect all matches
         let mut flags = Vec::new();
@@ -307,12 +322,13 @@ impl HttpClient {
         flags
     }
 
-    // Adds a URL to the queue if it hasn't been visited
+    // Adds a URL to the queue 
     async fn enqueue_url(&mut self, url: String) {
         let mut url_queue = self.url_queue.lock().await;
         url_queue.push_back(url);
     }
 
+    // Adds a vector of URLs to the queue
     async fn enqueue_url_vec(&mut self, urls: Vec<String>) {
         let mut url_queue = self.url_queue.lock().await;
         for url in urls.into_iter() {
@@ -358,8 +374,7 @@ impl HttpClient {
     // 3. See if there's next page
     async fn process_page(&mut self, host: &str, port: &str, alive: bool) {
         while {
-            let (url_queue, secret_flags) =
-                (self.url_queue.lock().await, self.secret_flags.lock().await);
+            let secret_flags = self.secret_flags.lock().await;
             eprintln!("secret flag{:?}", secret_flags.len());
             secret_flags.len() != 5
         } {
@@ -372,17 +387,12 @@ impl HttpClient {
                 }
             };
 
-            // If last character is '/', remove it
-            // if url.chars().last().unwrap() == '/' {
-            //     url = url[..url.len() - 1].to_string();
-            // }
-
-            let res = self.preceed_url(&url, alive).await;
+            let res = self.proceed_url(&url, alive).await;
 
             if res == 1 {
                 // Go to friend's page
                 let path = url.to_string() + "friends/1/";
-                self.preceed_url(&path, alive).await;
+                self.proceed_url(&path, alive).await;
             }
 
             eprintln!(
